@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  # 🧠 LLM local (Ollama)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434"]
+      interval: 10s
+      retries: 10
+
+  # 🕸️ Neo4j Knowledge Base
+  neo4j:
+    image: neo4j:5.25
+    container_name: neo4j
+    restart: unless-stopped
+    environment:
+      - NEO4J_AUTH=neo4j/neo4j_pass
+    ports:
+      - "7474:7474"   # web interface
+      - "7687:7687"   # bolt
+    volumes:
+      - neo4j_data:/data
+      - ./neo4j_setup.cypher:/docker-entrypoint-initdb.d/neo4j_setup.cypher
+
+  # 🤖 LangGraph Multi-Agent
+  app:
+    build: .
+    container_name: langgraph_app
+    depends_on:
+      - neo4j
+      - ollama
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=neo4j_pass
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=llama3:8b
+    volumes:
+      - .:/app
+    command: >
+      sh -c "sleep 10 && python -m src.main 'Explica los tres factores para elegir ETFs'"
+
+volumes:
+  neo4j_data:
+  ollama_data:
